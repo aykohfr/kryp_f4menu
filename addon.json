@@ -1,0 +1,6 @@
+{
+  "title": "Kryp F4 Menu",
+  "type": "servercontent",
+  "tags": ["roleplay", "darkrp", "f4"],
+  "ignore": ["*.psd", "*.blend", "README.md"]
+}
