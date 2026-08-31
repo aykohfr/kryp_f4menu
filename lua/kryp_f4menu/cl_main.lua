@@ -9,47 +9,15 @@ local backgroundMaterial
 local backgroundLoading = false
 local teamIdCache = setmetatable({}, {__mode = "k"})
 
-surface.CreateFont("KRYPF4.Category", {
-    font = "Roboto",
-    size = 18,
-    weight = 650,
-    antialias = true,
-})
+local fontScale = math.Clamp(ScrH() / 1080, 0.85, 1.15)
 
-surface.CreateFont("KRYPF4.JobName", {
-    font = "Roboto",
-    size = 20,
-    weight = 800,
-    antialias = true,
-})
-
-surface.CreateFont("KRYPF4.JobDesc", {
-    font = "Roboto",
-    size = 14,
-    weight = 450,
-    antialias = true,
-})
-
-surface.CreateFont("KRYPF4.Small", {
-    font = "Roboto",
-    size = 13,
-    weight = 650,
-    antialias = true,
-})
-
-surface.CreateFont("KRYPF4.Button", {
-    font = "Roboto",
-    size = 14,
-    weight = 800,
-    antialias = true,
-})
-
-surface.CreateFont("KRYPF4.Status", {
-    font = "Roboto",
-    size = 12,
-    weight = 800,
-    antialias = true,
-})
+surface.CreateFont("KRYPF4.Category", {font = "Roboto", size = math.floor(18 * fontScale), weight = 650, antialias = true})
+surface.CreateFont("KRYPF4.JobName", {font = "Roboto", size = math.floor(20 * fontScale), weight = 850, antialias = true})
+surface.CreateFont("KRYPF4.JobDesc", {font = "Roboto", size = math.floor(14 * fontScale), weight = 450, antialias = true})
+surface.CreateFont("KRYPF4.MetaLabel", {font = "Roboto", size = math.floor(10 * fontScale), weight = 800, antialias = true})
+surface.CreateFont("KRYPF4.MetaValue", {font = "Roboto", size = math.floor(13 * fontScale), weight = 800, antialias = true})
+surface.CreateFont("KRYPF4.Button", {font = "Roboto", size = math.floor(14 * fontScale), weight = 850, antialias = true})
+surface.CreateFont("KRYPF4.Status", {font = "Roboto", size = math.floor(10 * fontScale), weight = 850, antialias = true})
 
 local function roundedBox(radius, x, y, w, h, color)
     draw.RoundedBox(radius, x, y, w, h, color)
@@ -58,7 +26,6 @@ end
 local function truncateText(text, font, maxWidth)
     text = tostring(text or "")
     surface.SetFont(font)
-
     if surface.GetTextSize(text) <= maxWidth then return text end
 
     local suffix = "..."
@@ -70,7 +37,6 @@ local function truncateText(text, font, maxWidth)
         local mid = math.floor((low + high) / 2)
         local candidate = string.sub(text, 1, mid)
         local width = surface.GetTextSize(candidate)
-
         if width + suffixW <= maxWidth then
             best = candidate
             low = mid + 1
@@ -85,24 +51,17 @@ end
 local function drawCircle(x, y, radius, color)
     draw.NoTexture()
     surface.SetDrawColor(color)
-
     local poly = {}
     local segments = 32
-
     for i = 0, segments do
         local angle = math.rad((i / segments) * -360)
-        poly[#poly + 1] = {
-            x = x + math.sin(angle) * radius,
-            y = y + math.cos(angle) * radius,
-        }
+        poly[#poly + 1] = {x = x + math.sin(angle) * radius, y = y + math.cos(angle) * radius}
     end
-
     surface.DrawPoly(poly)
 end
 
 local function getTeamID(job)
     if teamIdCache[job] then return teamIdCache[job] end
-
     for teamID, current in pairs(RPExtraTeams or {}) do
         if current == job or (job.command and current.command == job.command) then
             teamIdCache[job] = teamID
@@ -113,7 +72,6 @@ end
 
 local function setBackgroundFromData()
     if not file.Exists(CFG.BackgroundDataPath, "DATA") then return false end
-
     backgroundMaterial = Material("../data/" .. CFG.BackgroundDataPath, "smooth noclamp")
     return backgroundMaterial and not backgroundMaterial:IsError()
 end
@@ -121,7 +79,6 @@ end
 local function loadBackground(forceRefresh)
     if backgroundLoading then return end
     if not forceRefresh and setBackgroundFromData() then return end
-
     backgroundLoading = true
 
     http.Fetch(CFG.BackgroundURL,
@@ -129,10 +86,7 @@ local function loadBackground(forceRefresh)
             backgroundLoading = false
             if code and (code < 200 or code >= 300) then return end
             if not isstring(body) or #body < 8 then return end
-
-            -- Signature PNG : 89 50 4E 47 0D 0A 1A 0A
             if string.byte(body, 1) ~= 137 or string.sub(body, 2, 4) ~= "PNG" then return end
-
             file.CreateDir("kryp_f4menu")
             file.Write(CFG.BackgroundDataPath, body)
             setBackgroundFromData()
@@ -150,7 +104,6 @@ end
 
 net.Receive("krypf4_send_states", function()
     local count = net.ReadUInt(16)
-
     for _ = 1, count do
         local teamID = net.ReadUInt(16)
         KRYPF4.JobStates[teamID] = {
@@ -164,215 +117,148 @@ end)
 
 local function categoryVisible(category)
     if not category or CFG.HiddenCategories[category.name] then return false end
-
     if isfunction(category.canSee) then
         local ok, result = pcall(category.canSee, LocalPlayer())
         if ok and result == false then return false end
     end
-
     return true
 end
 
 local function jobVisible(job)
-    if not job or CFG.HiddenJobCommands[job.command or ""] then return false end
-    return true
+    return job and not CFG.HiddenJobCommands[job.command or ""]
 end
 
 local function getCategories()
     local output = {}
-
     if DarkRP and DarkRP.getCategories then
         local all = DarkRP.getCategories()
         local jobs = all and all.jobs or nil
-
         if istable(jobs) then
             for _, category in ipairs(jobs) do
-                if categoryVisible(category) then
-                    output[#output + 1] = category
-                end
+                if categoryVisible(category) then output[#output + 1] = category end
             end
         end
     end
 
-    -- Fallback pour les dérivés DarkRP qui n'exposent pas les catégories classiques.
     if #output == 0 and istable(RPExtraTeams) then
         local byName = {}
-
         for _, job in pairs(RPExtraTeams) do
             local name = job.category or "Autres"
             byName[name] = byName[name] or {name = name, members = {}}
             byName[name].members[#byName[name].members + 1] = job
         end
-
-        for _, category in SortedPairs(byName) do
-            output[#output + 1] = category
-        end
+        for _, category in SortedPairs(byName) do output[#output + 1] = category end
     end
-
     return output
 end
 
 local function statusFor(teamID)
-    return KRYPF4.JobStates[teamID] or {
-        protected = false,
-        hasWhitelist = false,
-        protectionKnown = false,
-        whitelistAvailable = false,
-    }
+    return KRYPF4.JobStates[teamID] or {protected = false, hasWhitelist = false, protectionKnown = false, whitelistAvailable = false}
 end
 
 local function getVisualState(teamID, hovered)
     local state = statusFor(teamID)
-
     if state.protected and state.hasWhitelist then
-        return {
-            bg = hovered and C.whitelistAllowedHover or C.whitelistAllowed,
-            border = C.whitelistAllowedBorder,
-            accent = C.whitelistAllowedAccent,
-            pill = C.whitelistAllowedPill,
-            statusText = "WHITELIST OK",
-            statusColor = C.whitelistAllowedText,
-            denied = false,
-        }
+        return {bg = hovered and C.whitelistAllowedHover or C.whitelistAllowed, border = C.whitelistAllowedBorder, accent = C.whitelistAllowedAccent, pill = C.whitelistAllowedPill, statusText = "Whitelist OK", statusColor = C.whitelistAllowedText, denied = false}
     end
-
     if state.protected and not state.hasWhitelist then
-        return {
-            bg = hovered and C.whitelistDeniedHover or C.whitelistDenied,
-            border = C.whitelistDeniedBorder,
-            accent = C.whitelistDeniedAccent,
-            pill = C.whitelistDeniedPill,
-            statusText = "WHITELIST REQUISE",
-            statusColor = C.whitelistDeniedText,
-            denied = true,
-        }
+        return {bg = hovered and C.whitelistDeniedHover or C.whitelistDenied, border = C.whitelistDeniedBorder, accent = C.whitelistDeniedAccent, pill = C.whitelistDeniedPill, statusText = "Whitelist requise", statusColor = C.whitelistDeniedText, denied = true}
     end
-
-    return {
-        bg = hovered and C.normalHover or C.normal,
-        border = C.normalBorder,
-        accent = C.normalAccent,
-        pill = C.normalPill,
-        statusText = "PUBLIC",
-        statusColor = C.normalStatusText,
-        denied = false,
-    }
+    return {bg = hovered and C.normalHover or C.normal, border = C.normalBorder, accent = C.normalAccent, pill = C.normalPill, statusText = "Public", statusColor = C.normalStatusText, denied = false}
 end
 
 local function createJobCard(parent, job, scale)
     local teamID = getTeamID(job)
     if not teamID then return end
 
-    local cardHeight = math.floor(CFG.JobCardHeight * scale)
-    local spacing = math.max(5, math.floor(CFG.JobSpacing * scale))
-
+    -- Hauteur minimale volontaire : empêche le bouton, les places et le badge de se chevaucher.
+    local cardHeight = math.max(100, math.floor(114 * scale))
+    local spacing = math.max(8, math.floor((CFG.JobSpacing or 9) * scale))
     local card = vgui.Create("DPanel")
     parent:AddItem(card)
     card:Dock(TOP)
-    card:DockMargin(0, 0, 6, spacing)
+    card:DockMargin(0, 0, 7, spacing)
     card:SetTall(cardHeight)
     card:SetMouseInputEnabled(true)
 
+    local select
+
     card.Paint = function(self, w, h)
-        local visual = getVisualState(teamID, self:IsHovered())
+        local hovered = self:IsHovered() or (IsValid(select) and select:IsHovered())
+        local visual = getVisualState(teamID, hovered)
         local current = LocalPlayer():Team() == teamID
 
-        roundedBox(7, 0, 0, w, h, visual.bg)
-
+        roundedBox(8, 0, 0, w, h, visual.bg)
         surface.SetDrawColor(visual.border)
         surface.DrawOutlinedRect(0, 0, w, h, 1)
 
-        -- Barre d'état discrète à gauche de la carte.
-        roundedBox(6, 0, 0, math.max(4, math.floor(4 * scale)), h, visual.accent)
+        -- La couleur de statut reste sur le bord gauche : plus lisible et moins agressif.
+        roundedBox(7, 0, 0, math.max(4, math.floor(4 * scale)), h, visual.accent)
 
-        local circleX = math.floor(39 * scale)
+        local padding = math.max(14, math.floor(16 * scale))
+        local circleRadius = math.max(18, math.floor(22 * scale))
+        local circleX = padding + circleRadius
         local circleY = math.floor(h * 0.5)
-        local circleRadius = math.max(17, math.floor(23 * scale))
         local circleColor = job.color or Color(58, 58, 58)
 
-        drawCircle(circleX, circleY, circleRadius, Color(12, 13, 14, 225))
-        drawCircle(circleX, circleY, circleRadius - 3, Color(circleColor.r, circleColor.g, circleColor.b, 235))
+        drawCircle(circleX, circleY, circleRadius + 2, Color(9, 10, 11, 235))
+        drawCircle(circleX, circleY, circleRadius, Color(circleColor.r, circleColor.g, circleColor.b, 235))
 
-        local textX = math.floor(75 * scale)
-        local rightReserve = math.floor(222 * scale)
-        local maxTextW = math.max(110, w - textX - rightReserve)
+        local buttonW = math.max(118, math.floor(132 * scale))
+        local actionX = w - padding - buttonW
+        local infoW = math.max(112, math.floor(128 * scale))
+        local infoGap = math.max(12, math.floor(14 * scale))
+        local infoX = actionX - infoGap - infoW
 
-        draw.SimpleText(
-            truncateText(job.name or team.GetName(teamID), "KRYPF4.JobName", maxTextW),
-            "KRYPF4.JobName",
-            textX,
-            math.floor(h * 0.33),
-            C.text,
-            TEXT_ALIGN_LEFT,
-            TEXT_ALIGN_CENTER
-        )
+        -- Bloc dédié aux informations secondaires.
+        roundedBox(6, infoX - math.floor(10 * scale), math.floor(12 * scale), infoW + math.floor(16 * scale), h - math.floor(24 * scale), Color(0, 0, 0, 28))
 
-        local description = job.description or "Aucune description pour ce métier."
+        local textX = circleX + circleRadius + math.max(14, math.floor(16 * scale))
+        local textMax = math.max(100, infoX - textX - math.max(14, math.floor(16 * scale)))
+
+        draw.SimpleText(truncateText(job.name or team.GetName(teamID), "KRYPF4.JobName", textMax), "KRYPF4.JobName", textX, math.floor(h * 0.35), C.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+
+        local description = tostring(job.description or "Aucune description pour ce métier.")
         description = string.gsub(description, "[\r\n]+", " ")
+        draw.SimpleText(truncateText(description, "KRYPF4.JobDesc", textMax), "KRYPF4.JobDesc", textX, math.floor(h * 0.65), C.muted, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
 
-        draw.SimpleText(
-            truncateText(description, "KRYPF4.JobDesc", maxTextW),
-            "KRYPF4.JobDesc",
-            textX,
-            math.floor(h * 0.64),
-            C.muted,
-            TEXT_ALIGN_LEFT,
-            TEXT_ALIGN_CENTER
-        )
+        -- PLACES et ACCÈS sont séparés du bouton d'action.
+        draw.SimpleText("PLACES", "KRYPF4.MetaLabel", infoX, math.floor(h * 0.25), Color(132, 136, 143), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
 
-        local rightX = w - math.floor(18 * scale)
-
-        if CFG.ShowJobSlots then
-            local maximum = tonumber(job.max) or 0
-            local slots = maximum == 0 and tostring(team.NumPlayers(teamID)) or (team.NumPlayers(teamID) .. "/" .. maximum)
-            local slotsText = current and (slots .. "  •  ACTUEL") or slots
-
-            draw.SimpleText(
-                slotsText,
-                "KRYPF4.Small",
-                rightX,
-                math.floor(h * 0.22),
-                C.slotText,
-                TEXT_ALIGN_RIGHT,
-                TEXT_ALIGN_CENTER
-            )
-        end
+        local maximum = tonumber(job.max) or 0
+        local players = team.NumPlayers(teamID)
+        local slots = maximum == 0 and tostring(players) or (players .. " / " .. maximum)
+        draw.SimpleText(slots, "KRYPF4.MetaValue", infoX, math.floor(h * 0.43), C.slotText or Color(220, 220, 220), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
 
         surface.SetFont("KRYPF4.Status")
-        local statusW = math.max(math.floor(78 * scale), surface.GetTextSize(visual.statusText) + math.floor(20 * scale))
-        local statusH = math.max(20, math.floor(24 * scale))
-        local statusX = rightX - statusW
-        local statusY = math.floor(h * 0.38)
+        local statusW = math.min(infoW, math.max(math.floor(74 * scale), surface.GetTextSize(visual.statusText) + math.floor(20 * scale)))
+        local statusH = math.max(21, math.floor(23 * scale))
+        local statusY = math.floor(h * 0.61)
+        roundedBox(5, infoX, statusY, statusW, statusH, visual.pill)
+        draw.SimpleText(visual.statusText, "KRYPF4.Status", infoX + statusW * 0.5, statusY + statusH * 0.5, visual.statusColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 
-        roundedBox(5, statusX, statusY, statusW, statusH, visual.pill)
-        draw.SimpleText(
-            visual.statusText,
-            "KRYPF4.Status",
-            statusX + statusW * 0.5,
-            statusY + statusH * 0.5,
-            visual.statusColor,
-            TEXT_ALIGN_CENTER,
-            TEXT_ALIGN_CENTER
-        )
+        if current then
+            draw.SimpleText("MÉTIER ACTUEL", "KRYPF4.MetaLabel", actionX + buttonW * 0.5, math.floor(h * 0.24), Color(168, 173, 181), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+        end
     end
 
-    local select = vgui.Create("DButton", card)
+    select = vgui.Create("DButton", card)
     select:SetText("")
     select:SetCursor("hand")
-
-    local buttonW = math.floor(145 * scale)
-    local buttonH = math.max(28, math.floor(32 * scale))
+    local buttonW = math.max(118, math.floor(132 * scale))
+    local buttonH = math.max(38, math.floor(40 * scale))
     select:SetSize(buttonW, buttonH)
 
     select.Think = function(self)
         if not IsValid(card) then return end
-        self:SetPos(card:GetWide() - buttonW - math.floor(18 * scale), card:GetTall() - buttonH - math.floor(10 * scale))
+        local padding = math.max(14, math.floor(16 * scale))
+        self:SetPos(card:GetWide() - padding - buttonW, math.floor((card:GetTall() - buttonH) * 0.5))
     end
 
     select.Paint = function(self, w, h)
         local visual = getVisualState(teamID, self:IsHovered())
         local current = LocalPlayer():Team() == teamID
-        local color
+        local color = self:IsHovered() and C.buttonNormalHover or C.buttonNormal
         local textColor = color_white
 
         if visual.denied then
@@ -380,20 +266,15 @@ local function createJobCard(parent, job, scale)
         elseif current then
             color = self:IsHovered() and C.buttonCurrentHover or C.buttonCurrent
             textColor = C.buttonCurrentText
-        else
-            color = self:IsHovered() and C.buttonNormalHover or C.buttonNormal
         end
 
-        roundedBox(5, 0, 0, w, h, color)
-
-        local label = visual.denied and "Non autorisé" or (current and "Métier actuel" or "Devenir")
+        roundedBox(6, 0, 0, w, h, color)
+        local label = visual.denied and "Verrouillé" or (current and "Actuel" or "Devenir")
         draw.SimpleText(label, "KRYPF4.Button", w * 0.5, h * 0.5, textColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
     end
 
     select.DoClick = function()
         local state = statusFor(teamID)
-
-        -- Aucun son de clic : l'interface reste volontairement silencieuse.
         if state.protected and not state.hasWhitelist then return end
         if LocalPlayer():Team() == teamID then return end
 
@@ -401,9 +282,7 @@ local function createJobCard(parent, job, scale)
             net.WriteUInt(teamID, 16)
         net.SendToServer()
 
-        if CFG.CloseAfterJobRequest and IsValid(frame) then
-            frame:Close()
-        end
+        if CFG.CloseAfterJobRequest and IsValid(frame) then frame:Close() end
     end
 end
 
@@ -412,24 +291,17 @@ local function calculateMenuSize()
     local maxHeight = math.floor(ScrH() * (CFG.MenuHeightFraction or 0.82))
     local aspect = CFG.MenuAspectRatio or (1648 / 928)
     local height = math.floor(width / aspect)
-
     if height > maxHeight then
         height = maxHeight
         width = math.floor(height * aspect)
     end
-
-    -- Garde une petite marge même sur des résolutions atypiques.
     width = math.min(width, ScrW() - 32)
     height = math.min(height, ScrH() - 32)
-
     return width, height
 end
 
 local function createMenu()
-    if IsValid(frame) then
-        frame:Close()
-        return
-    end
+    if IsValid(frame) then frame:Close() return end
 
     loadBackground(false)
     requestStates()
@@ -448,18 +320,11 @@ local function createMenu()
     frame:MakePopup()
     frame:SetKeyboardInputEnabled(true)
     frame:SetMouseInputEnabled(true)
-
-    -- La première pression qui ouvre le menu ne doit pas le refermer immédiatement.
     frame.KRYPF4F4WasDown = input.IsKeyDown(KEY_F4)
 
     frame.Think = function(self)
         local isDown = input.IsKeyDown(KEY_F4)
-
-        if isDown and not self.KRYPF4F4WasDown then
-            self:Close()
-            return
-        end
-
+        if isDown and not self.KRYPF4F4WasDown then self:Close() return end
         self.KRYPF4F4WasDown = isDown
     end
 
@@ -471,73 +336,52 @@ local function createMenu()
         else
             surface.SetDrawColor(13, 14, 15, 255)
             surface.DrawRect(0, 0, w, h)
-
             draw.SimpleText("Rejoignez votre métier.", "KRYPF4.JobName", w * 0.5, h * 0.055, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-
             surface.SetDrawColor(80, 80, 80, 220)
             surface.DrawLine(math.floor(w * 0.288), math.floor(h * 0.11), math.floor(w * 0.288), math.floor(h * 0.89))
         end
     end
 
-    frame.OnClose = function()
-        frame = nil
-    end
-
-    local function px(value)
-        return math.floor(menuW * value)
-    end
-
-    local function py(value)
-        return math.floor(menuH * value)
-    end
+    frame.OnClose = function() frame = nil end
+    local function px(value) return math.floor(menuW * value) end
+    local function py(value) return math.floor(menuH * value) end
 
     local categoriesPanel = vgui.Create("DScrollPanel", frame)
     categoriesPanel:SetPos(px(CFG.Layout.categoryX), py(CFG.Layout.categoryY))
     categoriesPanel:SetSize(px(CFG.Layout.categoryW), py(CFG.Layout.categoryH))
-
     local categoriesBar = categoriesPanel:GetVBar()
     categoriesBar:SetWide(3)
     categoriesBar.Paint = function() end
     categoriesBar.btnUp.Paint = function() end
     categoriesBar.btnDown.Paint = function() end
-    categoriesBar.btnGrip.Paint = function(self, w, h)
-        roundedBox(2, 0, 0, w, h, Color(105, 108, 114, 145))
-    end
+    categoriesBar.btnGrip.Paint = function(self, w, h) roundedBox(2, 0, 0, w, h, Color(105, 108, 114, 145)) end
 
     local jobsPanel = vgui.Create("DScrollPanel", frame)
     jobsPanel:SetPos(px(CFG.Layout.jobsX), py(CFG.Layout.jobsY))
     jobsPanel:SetSize(px(CFG.Layout.jobsW), py(CFG.Layout.jobsH))
-
     local jobsBar = jobsPanel:GetVBar()
     jobsBar:SetWide(3)
     jobsBar.Paint = function() end
     jobsBar.btnUp.Paint = function() end
     jobsBar.btnDown.Paint = function() end
-    jobsBar.btnGrip.Paint = function(self, w, h)
-        roundedBox(2, 0, 0, w, h, Color(105, 108, 114, 145))
-    end
+    jobsBar.btnGrip.Paint = function(self, w, h) roundedBox(2, 0, 0, w, h, Color(105, 108, 114, 145)) end
 
     local selectedButton
-
     local function showCategory(category, button)
         jobsPanel:GetCanvas():Clear()
         selectedButton = button
-
         for _, job in ipairs(category.members or {}) do
-            if jobVisible(job) then
-                createJobCard(jobsPanel, job, scale)
-            end
+            if jobVisible(job) then createJobCard(jobsPanel, job, scale) end
         end
     end
 
     local categories = getCategories()
-
     for index, category in ipairs(categories) do
         local btn = vgui.Create("DButton")
         categoriesPanel:AddItem(btn)
         btn:Dock(TOP)
-        btn:DockMargin(0, 0, 6, math.max(5, math.floor(CFG.CategorySpacing * scale)))
-        btn:SetTall(math.floor(CFG.CategoryButtonHeight * scale))
+        btn:DockMargin(0, 0, 6, math.max(5, math.floor((CFG.CategorySpacing or 9) * scale)))
+        btn:SetTall(math.floor((CFG.CategoryButtonHeight or 54) * scale))
         btn:SetText("")
         btn:SetCursor("hand")
 
@@ -545,60 +389,32 @@ local function createMenu()
             local selected = selectedButton == self
             local color = selected and C.categorySelected or (self:IsHovered() and C.categoryHover or C.category)
             local border = selected and C.categorySelectedBorder or C.categoryBorder
-
             roundedBox(6, 0, 0, w, h, color)
             surface.SetDrawColor(border)
             surface.DrawOutlinedRect(0, 0, w, h, 1)
-
-            if selected then
-                roundedBox(5, 0, math.floor(h * 0.18), math.max(3, math.floor(3 * scale)), math.floor(h * 0.64), C.categoryAccent)
-            end
-
+            if selected then roundedBox(5, 0, math.floor(h * 0.18), math.max(3, math.floor(3 * scale)), math.floor(h * 0.64), C.categoryAccent) end
             local label = category.name or "Catégorie"
-            if CFG.ShowCategoryCount then
-                label = label .. "  (" .. tostring(#(category.members or {})) .. ")"
-            end
-
-            draw.SimpleText(
-                truncateText(label, "KRYPF4.Category", w - math.floor(28 * scale)),
-                "KRYPF4.Category",
-                math.floor(16 * scale),
-                h * 0.5,
-                selected and C.text or C.categoryText,
-                TEXT_ALIGN_LEFT,
-                TEXT_ALIGN_CENTER
-            )
+            if CFG.ShowCategoryCount then label = label .. "  (" .. tostring(#(category.members or {})) .. ")" end
+            draw.SimpleText(truncateText(label, "KRYPF4.Category", w - math.floor(28 * scale)), "KRYPF4.Category", math.floor(16 * scale), h * 0.5, selected and C.text or C.categoryText, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
         end
 
-        btn.DoClick = function()
-            -- Aucun son lors du changement de catégorie.
-            showCategory(category, btn)
-        end
-
+        btn.DoClick = function() showCategory(category, btn) end
         if index == 1 then
             timer.Simple(0, function()
-                if IsValid(frame) and IsValid(btn) then
-                    showCategory(category, btn)
-                end
+                if IsValid(frame) and IsValid(btn) then showCategory(category, btn) end
             end)
         end
     end
 
-    -- Zone cliquable directement au-dessus de « F4 - Fermer » présent dans le PNG.
-    -- On n'ajoute aucun texte supplémentaire pour conserver exactement le design du fond.
     local closeHitbox = vgui.Create("DButton", frame)
     closeHitbox:SetText("")
     closeHitbox:SetCursor("hand")
     closeHitbox:SetPos(px(0.020), py(0.905))
     closeHitbox:SetSize(px(0.125), py(0.065))
     closeHitbox.Paint = function(self, w, h)
-        if self:IsHovered() then
-            roundedBox(5, 0, 0, w, h, Color(255, 255, 255, 8))
-        end
+        if self:IsHovered() then roundedBox(5, 0, 0, w, h, Color(255, 255, 255, 8)) end
     end
-    closeHitbox.DoClick = function()
-        if IsValid(frame) then frame:Close() end
-    end
+    closeHitbox.DoClick = function() if IsValid(frame) then frame:Close() end end
 end
 
 hook.Add("ShowSpare2", "KRYPF4_ReplaceDarkRPF4", function()
